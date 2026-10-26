@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Подсказчик — скачать</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#161a24; --raise:#202636; --line:#2f3749; --ink:#eceff5; --ink2:#b9c0cf; --muted:#828ca1; --cue:#f2b84b; --tally:#e5484d; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:"Atkinson Hyperlegible",-apple-system,"Segoe UI",system-ui,sans-serif; line-height:1.55; }
+main { max-width:760px; margin:0 auto; padding:64px 20px 80px; }
+.mark { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:15px; }
+.mark i { width:10px; height:10px; border-radius:50%; background:var(--tally); box-shadow:0 0 0 4px rgba(229,72,77,.22); }
+h1 { font-size:clamp(34px,6vw,52px); line-height:1.08; margin:22px 0 14px; letter-spacing:-.01em; }
+.lede { font-size:19px; color:var(--ink2); max-width:600px; margin:0 0 34px; }
+.cue { border-left:3px solid var(--cue); padding:6px 0 6px 18px; margin:0 0 40px; }
+.cue small { color:var(--muted); display:block; font-size:14px; margin-bottom:6px; }
+.cue b { font-size:20px; display:block; }
+.cue span { color:var(--ink2); }
+.dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-bottom:12px; }
+.btn { display:flex; flex-direction:column; gap:2px; padding:16px 18px; border-radius:12px; text-decoration:none; color:var(--ink); background:var(--raise); border:1px solid var(--line); }
+.btn:hover { border-color:#4a5470; }
+.btn.primary { background:var(--cue); color:#1d1a12; border-color:var(--cue); }
+.btn strong { font-size:17px; }
+.btn em { font-style:normal; font-size:13px; opacity:.75; }
+.hint { color:var(--muted); font-size:14px; margin:0 0 48px; }
+h2 { font-size:20px; margin:40px 0 12px; }
+ol { padding-left:22px; color:var(--ink2); }
+li { margin:8px 0; }
+code { background:var(--raise); border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:.92em; }
+a { color:var(--cue); }
+:focus-visible { outline:2px solid var(--cue); outline-offset:3px; }
+footer { margin-top:56px; color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark"><i></i>Подсказчик</div>
+  <h1>Подсказки в реальном времени прямо во время звонка</h1>
+  <p class="lede">Приложение слушает собеседника в Zoom, Teams или Meet, распознаёт вопрос и сразу показывает, что ответить. Ещё можно спросить вручную или отправить скриншот экрана.</p>
+
+  <div class="cue">
+    <small>How does reinforcement learning differ from supervised learning?</small>
+    <b>RL learns from rewards by trial and error, not from labeled answers.</b>
+    <span>The agent acts, gets a reward, and improves over time.</span>
+  </div>
+
+  <div class="dl">
+    <a class="btn primary" id="win" href="downloads/ZoomAssistant-Windows.exe" download>
+      <strong>Скачать для Windows</strong><em>Windows 10 и 11 · .exe</em></a>
+    <a class="btn" id="mac" href="downloads/ZoomAssistant-mac.dmg" download>
+      <strong>Скачать для Mac</strong><em>Apple Silicon (M1 и новее), macOS 13+ · .dmg</em></a>
+  </div>
+  <p class="hint">Для входа нужен код доступа: его выдаёт администратор.</p>
+
+  <h2>Установка на Windows</h2>
+  <ol>
+    <li>Запусти скачанный <code>ZoomAssistant-Windows.exe</code>.</li>
+    <li>Если появится «Windows защитила компьютер», нажми <b>Подробнее</b> → <b>Выполнить в любом случае</b>.</li>
+    <li>Введи код доступа. Звук собеседника приложение берёт само, ничего дополнительно ставить не нужно.</li>
+  </ol>
+
+  <h2>Установка на Mac</h2>
+  <ol>
+    <li>Открой <code>ZoomAssistant-mac.dmg</code> и перетащи приложение в «Программы».</li>
+    <li>При первом запуске macOS скажет, что не может проверить разработчика. Открой <b>Системные настройки → Конфиденциальность и безопасность</b> и нажми <b>Всё равно открыть</b>.</li>
+    <li>Разреши <b>Запись экрана и системного звука</b>, когда приложение попросит, и перезапусти его.</li>
+    <li>Введи код доступа.</li>
+  </ol>
+
+  <footer>Подсказчик</footer>
+</main>
+<script>
+  // подсветить кнопку под систему посетителя
+  if (/Mac/.test(navigator.platform)) {
+    document.getElementById("mac").classList.add("primary");
+    document.getElementById("win").classList.remove("primary");
+  }
+</script>
+</body>
+</html>

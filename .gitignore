@@ -1,0 +1,21 @@
+# секреты и личные данные — никогда в git
+.env
+server/.env
+server/data/
+app/settings.json
+app/context.md
+app/sessions/
+app/app.log
+app/build_config.py
+# сборка
+build/
+dist/
+dmg/
+*.spec
+app/mac_audio/sck_audio
+server/site/downloads/*
+!server/site/downloads/.gitkeep
+# окружения
+.venv*/
+__pycache__/
+.DS_Store

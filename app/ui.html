@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Подсказчик</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --alpha: .94;
+  --fs: 19px;
+  --bg: 22 26 36;          /* slate, rgb triplet for alpha */
+  --raise: #232a3a;
+  --line: #2f3749;
+  --ink: #eceff5;
+  --ink-2: #b9c0cf;
+  --muted: #828ca1;
+  --cue: #f2b84b;          /* amber cue light */
+  --cue-soft: rgba(242,184,75,.14);
+  --tally: #e5484d;        /* on-air red */
+  --radius-win: 14px;
+  --font: "Atkinson Hyperlegible", -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: var(--ink); font-family: var(--font);
+  -webkit-font-smoothing: antialiased; overflow: hidden; }
+body.opaque { background: rgb(var(--bg)); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cue); outline-offset: 2px; border-radius: 6px; }
+
+.win { position: fixed; inset: 0; display: flex; flex-direction: column;
+  background: rgb(var(--bg) / var(--alpha)); border: 1px solid rgb(255 255 255 / .07);
+  border-radius: var(--radius-win); overflow: hidden;
+  backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2); }
+
+/* ---------- top bar ---------- */
+.bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--line); flex: none; user-select: none; -webkit-user-select: none; }
+.state { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.tally { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / .04); transition: background .2s; }
+.tally.live { background: var(--tally); }
+.tally.live.hot { box-shadow: 0 0 0 4px rgba(229,72,77,.28); }
+.tally.think { background: var(--cue); }
+.state-text { font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter { display: flex; gap: 2px; align-items: flex-end; height: 14px; flex: none; }
+.meter i { width: 3px; border-radius: 2px; background: #3a4357; height: 3px; transition: height .08s, background .08s; }
+.meter.hot i { background: var(--cue); }
+
+.tools { display: flex; align-items: center; gap: 2px; flex: none; }
+.ibtn { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer; }
+.ibtn:hover { background: rgb(255 255 255 / .06); color: var(--ink); }
+.ibtn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ibtn.on { color: var(--cue); }
+.answer-btn { height: 30px; padding: 0 12px 0 10px; border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--cue); color: #1d1a12; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; margin-right: 4px; }
+.answer-btn:hover { filter: brightness(1.06); }
+.answer-btn svg { width: 14px; height: 14px; fill: currentColor; }
+.answer-btn kbd { font: inherit; font-weight: 400; opacity: .6; font-size: 11px; }
+
+/* ---------- cue card (hero) ---------- */
+.stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cue { padding: 16px 18px 14px; border-bottom: 1px solid var(--line); flex: none; max-height: 68%; overflow-y: auto; }
+.q { font-size: calc(var(--fs) * .72); line-height: 1.4; color: var(--muted); margin: 0 0 10px; }
+.hint { border-left: 3px solid var(--cue); padding: 2px 0 2px 14px; font-size: var(--fs); line-height: 1.48; }
+.hint p { margin: 0 0 .45em; }
+.hint p.lead { font-weight: 700; color: #fff; }
+.hint p.tr { color: var(--cue); font-style: italic; font-size: .82em; }
+.hint ul { margin: .2em 0 0; padding: 0 0 0 1.05em; color: var(--ink-2); }
+.hint li { margin: .18em 0; }
+.hint li::marker { color: var(--cue); }
+.hint strong { color: #fff; }
+.caret { display: inline-block; width: .5em; height: 1.05em; vertical-align: -.15em; margin-left: 2px;
+  background: var(--cue); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.meta { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-left: 17px; font-size: 12px; color: var(--muted); }
+.link { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #4a5366; }
+.link:hover { color: var(--ink); }
+
+.empty { padding: 26px 22px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.empty b { color: var(--ink-2); font-weight: 700; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 14px; font-size: 13px; }
+.keys kbd { font: inherit; color: var(--ink-2); background: var(--raise); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; justify-self: start; }
+
+/* ---------- earlier hints ---------- */
+.feed { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 8px; }
+.feed-title { font-size: 12px; color: var(--muted); padding: 10px 18px 4px; }
+.past { padding: 10px 18px; border-top: 1px solid rgb(255 255 255 / .04); cursor: pointer; }
+.past:hover { background: rgb(255 255 255 / .025); }
+.past .pq { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.past .pa { font-size: 14px; color: var(--ink-2); margin-top: 3px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.past.open .pa { -webkit-line-clamp: unset; }
+.past .pa ul { margin: 2px 0 0; padding-left: 1em; }
+.past .pa p { margin: 0 0 2px; }
+
+/* ---------- footer: what was just heard ---------- */
+.heard { flex: none; display: flex; gap: 10px; align-items: baseline; padding: 9px 14px 10px; border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--ink-2); background: rgb(0 0 0 / .14); }
+.heard .who { color: var(--muted); flex: none; font-size: 12px; }
+.heard .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- toast ---------- */
+.toast { position: absolute; left: 12px; right: 12px; bottom: 48px; padding: 10px 12px; border-radius: 10px;
+  background: #3a1f24; border: 1px solid #6b2a31; color: #ffd9dc; font-size: 13px; line-height: 1.4;
+  opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.toast.show { opacity: 1; transform: none; pointer-events: auto; }
+.toast.info { background: #26304a; border-color: #3b4a70; color: var(--ink); }
+
+/* ---------- settings sheet ---------- */
+.sheet { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; background: #161a24;
+  padding: 6px 18px 18px; overflow-y: auto; transform: translateY(-8px); opacity: 0; pointer-events: none;
+  transition: opacity .16s, transform .16s; }
+.sheet.open { transform: none; opacity: 1; pointer-events: auto; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row label { font-size: 14px; }
+.row small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.seg { display: inline-flex; background: var(--raise); border: 1px solid var(--line); border-radius: 9px; padding: 2px; flex: none; }
+.seg button { border: 0; background: none; color: var(--muted); padding: 5px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.seg button.sel { background: #39425a; color: var(--ink); }
+input[type=range] { width: 130px; accent-color: var(--cue); }
+.switch { width: 38px; height: 22px; border-radius: 11px; border: 0; background: #39425a; position: relative; cursor: pointer; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #cfd5e2; transition: transform .15s; }
+.switch.on { background: var(--cue); }
+.switch.on::after { transform: translateX(16px); background: #1d1a12; }
+.plain-btn { border: 1px solid var(--line); background: var(--raise); color: var(--ink); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.plain-btn:hover { border-color: #46506a; }
+
+
+/* ---------- manual ask bar ---------- */
+.ask { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); flex: none; }
+.ask input { flex: 1; min-width: 0; height: 32px; border: 1px solid transparent; border-radius: 8px; background: rgb(255 255 255 / .04);
+  color: var(--ink); font: inherit; font-size: 14px; padding: 0 10px; outline: none; }
+.ask input::placeholder { color: var(--muted); }
+.ask input:focus { border-color: #4a5470; background: rgb(255 255 255 / .06); }
+.chip { height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--raise); color: var(--ink-2); font-size: 13px; cursor: pointer; flex: none; }
+.chip:hover { color: var(--ink); border-color: #46506a; }
+.chip svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chip kbd { font: inherit; font-size: 11px; color: var(--muted); }
+
+/* ---------- code in answers ---------- */
+.hint pre, .arc-a pre { background: rgb(0 0 0 / .32); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto;
+  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #e8e3d3; margin: .4em 0 .6em; white-space: pre; }
+.hint code, .arc-a code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .88em; background: rgb(255 255 255 / .07); padding: 1px 5px; border-radius: 4px; }
+.hint pre code, .arc-a pre code { background: none; padding: 0; font-size: inherit; }
+.q .tag { color: var(--cue); }
+
+/* ---------- session pager ---------- */
+.heard .txt { flex: 1; }
+.pager { display: flex; align-items: center; gap: 2px; flex: none; margin-left: auto; }
+.pager button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
+.pager button:hover:not(:disabled) { background: rgb(255 255 255 / .07); color: var(--ink); }
+.pager button:disabled { opacity: .3; cursor: default; }
+.pager .pos { min-width: 44px; text-align: center; font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
+
+/* ---------- archive (past session) ---------- */
+.stage { position: relative; }
+.archive { position: absolute; inset: 0; background: #161a24; display: flex; flex-direction: column; }
+.archive[hidden] { display: none; }
+.arc-head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); flex: none; }
+.arc-title { font-size: 14px; font-weight: 700; }
+.arc-sub { font-size: 12px; color: var(--muted); }
+.arc-head .plain-btn { margin-left: auto; }
+.arc-list { flex: 1; overflow-y: auto; padding: 4px 0 14px; }
+.arc-item { padding: 12px 18px; border-bottom: 1px solid rgb(255 255 255 / .04); }
+.arc-q { font-size: 13px; color: var(--muted); line-height: 1.45; }
+.arc-q time { color: #5d6679; margin-right: 6px; font-size: 12px; }
+.arc-a { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin-top: 6px; border-left: 2px solid rgba(242,184,75,.55); padding-left: 12px; }
+.arc-a p { margin: 0 0 4px; } .arc-a p.lead { color: var(--ink); font-weight: 700; }
+.arc-a ul { margin: 2px 0 0; padding-left: 1.05em; } .arc-a li::marker { color: var(--cue); }
+.arc-empty { padding: 26px 18px; color: var(--muted); font-size: 14px; }
+
+
+/* ---------- sign-in & context editor ---------- */
+.gate { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; background: #161a24; display: flex; flex-direction: column;
+  justify-content: center; padding: 28px 26px 40px; z-index: 5; }
+.gate[hidden] { display: none; }
+.gate h2 { font-size: 22px; line-height: 1.25; margin: 0 0 8px; }
+.gate p { color: var(--ink-2); font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+.gate form { display: flex; gap: 8px; }
+.gate input { flex: 1; min-width: 0; height: 40px; border-radius: 9px; border: 1px solid var(--line); background: rgb(255 255 255 / .05);
+  color: var(--ink); font: inherit; font-size: 15px; padding: 0 12px; outline: none; letter-spacing: .02em; }
+.gate input:focus { border-color: var(--cue); }
+.gate .go { height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--cue); color: #1d1a12; font-weight: 700; cursor: pointer; }
+.gate .go:disabled { opacity: .6; cursor: default; }
+.gate .err { color: #ff9ba0; font-size: 13px; min-height: 20px; margin-top: 10px; }
+.gate small { color: var(--muted); font-size: 12px; margin-top: 18px; display: block; }
+.editor { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; background: #161a24; display: flex; flex-direction: column; z-index: 4; }
+.editor[hidden] { display: none; }
+.editor .arc-head small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.editor textarea { flex: 1; margin: 12px 14px 14px; border-radius: 10px; border: 1px solid var(--line); background: rgb(255 255 255 / .03);
+  color: var(--ink); font: 14px/1.55 var(--font); padding: 12px 14px; resize: none; outline: none; }
+.editor textarea:focus { border-color: #4a5470; }
+.row[hidden] { display: none; }
+.acct { font-size: 13px; color: var(--ink-2); }
+.acct b { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="win">
+  <header class="bar pywebview-drag-region">
+    <div class="state pywebview-drag-region">
+      <span class="tally pywebview-drag-region" id="tally"></span>
+      <span class="state-text pywebview-drag-region" id="stateText">Запуск…</span>
+    </div>
+    <div class="meter pywebview-drag-region" id="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="tools">
+      <button class="answer-btn" id="answerBtn" title="Подсказать по последней реплике">
+        <svg viewBox="0 0 16 16"><path d="M9.5 1 3 9h4.5L6.5 15 13 7H8.5z"/></svg>Ответить <kbd id="kAns">⌘↵</kbd></button>
+      <button class="ibtn" id="pauseBtn" title="Пауза"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+      <button class="ibtn" id="pinBtn" title="Поверх всех окон"><svg viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 4H6l3-4z"/></svg></button>
+      <button class="ibtn" id="setBtn" title="Настройки"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+      <button class="ibtn" id="minBtn" title="Свернуть"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+      <button class="ibtn" id="closeBtn" title="Закрыть"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
+    </div>
+  </header>
+
+  <form class="ask" id="askForm" autocomplete="off">
+    <input id="askInput" placeholder="Спросить вручную… Enter — отправить" aria-label="Вопрос вручную">
+    <button type="button" class="chip" id="shotBtn" title="Снимок экрана — ИИ прочитает, что на нём">
+      <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Скриншот <kbd id="kShot">⌘⇧↵</kbd></button>
+  </form>
+
+  <main class="stage">
+    <section class="cue" id="cue" aria-live="polite">
+      <div class="empty" id="empty">
+        Когда собеседник задаст вопрос, подсказка появится здесь. Если вопрос прозвучал неявно, нажми <b>Ответить</b>.
+        <div class="keys">
+          <kbd class="k-mod">⌘ ↵</kbd><span>подсказать по последней реплике (или отправить текст из поля)</span>
+          <kbd class="k-mod">⌘ ⇧ ↵</kbd><span>скриншот экрана → ответ по нему</span>
+          <kbd class="k-mod">⌘ [ / ]</kbd><span>прошлые сессии</span>
+          <kbd class="k-mod">⌘ P</kbd><span>пауза</span>
+          <kbd class="k-mod">⌘ K</kbd><span>очистить разговор</span>
+          <kbd class="k-mod">⌘ + / −</kbd><span>размер текста</span>
+          <kbd class="k-mod">⌘ ,</kbd><span>настройки</span>
+        </div>
+      </div>
+    </section>
+    <div class="feed" id="feed"></div>
+    <section class="archive" id="archive" hidden>
+      <div class="arc-head">
+        <div><div class="arc-title" id="arcTitle"></div><div class="arc-sub" id="arcSub"></div></div>
+        <button class="plain-btn" id="arcBack">К текущей</button>
+      </div>
+      <div class="arc-list" id="arcList"></div>
+    </section>
+  </main>
+
+  <footer class="heard">
+    <span class="who">Слышу</span><span class="txt" id="heard">—</span>
+    <div class="pager" aria-label="Сессии">
+      <button id="prevS" title="Предыдущая сессия (⌘[)">‹</button>
+      <span class="pos" id="sPos" title="Сессии">1/1</span>
+      <button id="nextS" title="Следующая сессия (⌘])">›</button>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+
+
+  <section class="gate" id="gate" hidden aria-label="Вход">
+    <h2>Введи код доступа</h2>
+    <p>Код выдаёт администратор. Его нужно ввести один раз — приложение запомнит.</p>
+    <form id="gateForm" autocomplete="off">
+      <input id="gateCode" placeholder="za-xxxxxxxxxxxx" spellcheck="false" aria-label="Код доступа">
+      <button class="go" id="gateBtn">Войти</button>
+    </form>
+    <div class="err" id="gateErr" role="alert"></div>
+    <small id="gateVer"></small>
+  </section>
+
+  <section class="editor" id="editor" hidden aria-label="Обо мне и звонке">
+    <div class="arc-head">
+      <div><div class="arc-title">Обо мне и звонке</div><small>Опыт, вакансия или тема звонка — ИИ отвечает от твоего лица</small></div>
+      <button class="plain-btn" id="edCancel">Отмена</button>
+      <button class="plain-btn" id="edSave" style="margin-left:6px;border-color:var(--cue)">Сохранить</button>
+    </div>
+    <textarea id="edText" spellcheck="false"></textarea>
+  </section>
+  <section class="sheet" id="sheet" aria-label="Настройки">
+    <div class="row"><div><label>Язык собеседника</label><small>Ограничение языков улучшает распознавание</small></div>
+      <div class="seg" data-key="lang"><button data-v="auto">Авто</button><button data-v="en">EN</button><button data-v="ru">RU</button><button data-v="ru,en">RU+EN</button></div></div>
+    <div class="row" id="acctRow" hidden><div><label>Аккаунт</label><small class="acct" id="acctInfo">…</small></div>
+      <button class="plain-btn" id="signOut">Сменить код</button></div>
+    <div class="row" id="providerRow"><div><label>Модель ответов</label><small>Распознавание речи в любом случае через Groq</small></div>
+      <div class="seg" data-key="llm_provider"><button data-v="groq">Groq</button><button data-v="anthropic">Claude</button></div></div>
+    <div class="row"><div><label>Язык подсказки</label></div>
+      <div class="seg" data-key="answer_lang"><button data-v="same">Как вопрос</button><button data-v="ru">RU</button><button data-v="en">EN</button></div></div>
+    <div class="row"><div><label>Перевод вопроса на русский</label><small>Строка с переводом над ответом</small></div>
+      <button class="switch" data-key="translate" data-on="ru" role="switch"></button></div>
+    <div class="row"><div><label>Скрыть от демонстрации экрана</label><small id="capNote">Окно видно при демонстрации и на скриншотах</small></div>
+      <button class="switch" data-key="hide_capture" data-on="1" role="switch"></button></div>
+    <div class="row"><div><label>Ждать после паузы</label><small>Если собеседник замолчал посреди вопроса</small></div>
+      <div class="seg" data-key="turn_wait"><button data-v="fast">Быстро</button><button data-v="normal">Обычно</button><button data-v="patient">Терпеливо</button></div></div>
+    <div class="row"><div><label>Пунктов в ответе</label></div>
+      <div class="seg" data-key="bullets"><button data-v="0">0</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div></div>
+    <div class="row"><div><label>Помнить реплик</label><small>Сколько последних строк разговора видит ИИ</small></div>
+      <div class="seg" data-key="history_turns"><button data-v="6">6</button><button data-v="12">12</button><button data-v="20">20</button><button data-v="30">30</button></div></div>
+    <div class="row"><label for="fs">Размер текста</label><input type="range" id="fs" min="14" max="30" step="1"></div>
+    <div class="row"><label for="op">Непрозрачность</label><input type="range" id="op" min="45" max="100" step="1"></div>
+    <div class="row"><div><label>Обо мне и звонке</label><small>Резюме, вакансия, тема — чтобы ответы были про тебя</small></div>
+      <button class="plain-btn" id="editCtx">Редактировать</button></div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = () => (window.pywebview && window.pywebview.api) || null;
+const isMac = /Mac/.test(navigator.platform);
+const MOD = isMac ? "⌘" : "Ctrl";
+if (!isMac) { document.querySelectorAll(".k-mod").forEach(k => k.textContent = k.textContent.replace("⌘", "Ctrl")); $("#kAns").textContent = "Ctrl↵"; $("#kShot").textContent = "Ctrl⇧↵"; }
+
+const state = { paused: false, pinned: true, pending: [], cards: {}, current: null, settings: {} };
+
+/* ---------- tiny markdown: lead line, "- " bullets, "≈ " translation, **bold** ---------- */
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function inline(raw) {
+  return esc(raw).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+function md(text) {
+  const all = text.replace(/\r/g, "").split("\n");
+  let html = "", inList = false, leadDone = false, code = null;
+  for (const line of all) {
+    if (/^\s*```/.test(line)) {
+      if (code === null) { if (inList) { html += "</ul>"; inList = false; } code = []; }
+      else { html += `<pre><code>${esc(code.join("\n"))}</code></pre>`; code = null; }
+      continue;
+    }
+    if (code !== null) { code.push(line); continue; }
+    const raw = line.trim(); if (!raw) continue;
+    if (/^#{1,4}\s+/.test(raw)) { if (inList) { html += "</ul>"; inList = false; } html += `<p><strong>${inline(raw.replace(/^#+\s+/, ""))}</strong></p>`; leadDone = true; continue; }
+    const l = inline(raw);
+    if (/^[-•*]\s+/.test(raw)) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += "<li>" + l.replace(/^[-•*]\s+/, "") + "</li>";
+      continue;
+    }
+    if (inList) { html += "</ul>"; inList = false; }
+    if (raw.startsWith("≈")) { html += `<p class="tr">${l}</p>`; continue; }
+    html += `<p class="${leadDone ? "" : "lead"}">${l}</p>`; leadDone = true;
+  }
+  if (code !== null) html += `<pre><code>${esc(code.join("\n"))}</code></pre>`;
+  if (inList) html += "</ul>";
+  return html;
+}
+
+/* ---------- status ---------- */
+function setState(text, mode) {
+  $("#stateText").textContent = text;
+  const t = $("#tally"); t.className = "tally pywebview-drag-region" + (mode ? " " + mode : "");
+}
+const bars = [...document.querySelectorAll("#meter i")];
+function level(rms, thr) {
+  const v = Math.min(1, Math.log10(1 + rms * 300) / Math.log10(301));
+  const hot = rms > thr;
+  bars.forEach((b, i) => {
+    const h = Math.max(3, Math.min(14, (v * 14) * (0.55 + 0.45 * Math.sin((i + 1) * 1.7 + rms * 400) ** 2)));
+    b.style.height = h + "px";
+  });
+  $("#meter").classList.toggle("hot", hot);
+  if (!state.paused && !state.thinking) $("#tally").classList.toggle("hot", hot);
+}
+
+let toastTimer;
+function toast(msg, info) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (info ? " info" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", info ? 2200 : 6000);
+}
+
+/* ---------- cue card + history ---------- */
+function archiveCurrent() {
+  const c = state.current; if (!c || !c.done) return;
+  const el = document.createElement("div");
+  el.className = "past";
+  el.innerHTML = `<div class="pq">${esc(c.q || "Без вопроса")}</div><div class="pa">${md(c.text)}</div>`;
+  el.onclick = () => el.classList.toggle("open");
+  const feed = $("#feed");
+  if (!feed.querySelector(".feed-title")) feed.insertAdjacentHTML("afterbegin", `<div class="feed-title">Ранее</div>`);
+  feed.querySelector(".feed-title").after(el);
+}
+function renderCue(c) {
+  $("#cue").innerHTML =
+    (c.q ? `<p class="q">${c.manual ? '<span class="tag">' + (c.q.startsWith("Скриншот") ? "" : "Вы: ") + "</span>" : ""}${esc(c.q)}</p>` : "") +
+    `<div class="hint" id="hint">${md(c.text)}${c.done ? "" : '<span class="caret"></span>'}</div>` +
+    (c.done ? `<div class="meta"><span>${c.secs.toFixed(1)} с</span><button class="link" id="copyBtn">Копировать</button></div>` : "");
+  if (c.done) $("#copyBtn").onclick = () => copy(c.text);
+  if (!c.done) {
+    // keep the caret inline with the last paragraph / bullet
+    const hint = $("#hint"), caret = hint.querySelector(".caret"), last = hint.querySelector("li:last-of-type, p:last-of-type");
+    const lastEl = [...hint.querySelectorAll("p, li")].pop();
+    if (lastEl && caret) lastEl.appendChild(caret);
+  }
+}
+function copy(text) {
+  navigator.clipboard?.writeText(text).then(() => toast("Скопировано", true), () => toast("Не удалось скопировать"));
+}
+
+const handlers = {
+  status: m => setState(m[1], state.paused ? "" : "live"),
+  ready: m => setState("Слушаю", "live"),
+  level: m => level(m[1], m[2]),
+  them: m => {
+    $("#heard").textContent = m[1];
+    const trivial = !/\?/.test(m[1]) && m[1].trim().split(/\s+/).length <= 2;
+    if (!trivial) state.pending.push(m[1]);
+    if (state.pending.length > 4) state.pending.shift();
+  },
+  start: m => {
+    archiveCurrent();
+    const manual = !!m[3];
+    const c = { id: m[1], q: manual ? m[3] : state.pending.join(" "), manual, text: "", done: false, secs: 0 };
+    state.cards[c.id] = c; state.current = c; state.thinking = true;
+    setState("Пишу…", "think");
+    renderCue(c);
+  },
+  delta: m => {
+    const c = state.cards[m[1]]; if (!c) return;
+    c.text += m[2];
+    if (state.current === c) renderCue(c);
+  },
+  cancel: m => {
+    const c = state.cards[m[1]]; if (!c) return;
+    delete state.cards[m[1]];
+    if (state.current === c) { state.current = null; $("#cue").innerHTML = ""; }
+  },
+  done: m => {
+    const c = state.cards[m[1]]; if (!c) return;
+    c.done = true; c.secs = m[2]; c.text = c.text.trim();
+    if (!c.manual) state.pending = [];
+    state.thinking = false;
+    setState(state.paused ? "Пауза" : "Слушаю", state.paused ? "" : "live");
+    if (state.current === c) renderCue(c);
+  },
+  waiting: m => { if (!state.paused) setState("Жду, договорит ли…", "live"); },
+  idle: m => { state.thinking = false; setState(state.paused ? "Пауза" : "Слушаю", state.paused ? "" : "live"); },
+  error: m => toast(m[1]),
+};
+window.ui = { batch(list) { for (const m of list) (handlers[m[0]] || (() => {}))(m); } };
+
+/* ---------- actions ---------- */
+function call(name, ...args) { const a = api(); return a && a[name] ? a[name](...args) : Promise.resolve(null); }
+function answer() {
+  const v = $("#askInput").value.trim();
+  if (v) return askNow();
+  setState("Пишу…", "think"); call("force");
+}
+function askNow() {
+  const v = $("#askInput").value.trim(); if (!v) return;
+  $("#askInput").value = ""; showLive();
+  setState("Пишу…", "think"); call("ask", v);
+}
+function shot() {
+  const v = $("#askInput").value.trim();
+  $("#askInput").value = ""; showLive();
+  setState("Делаю скриншот…", "think"); call("screenshot", v);
+}
+$("#askForm").addEventListener("submit", e => { e.preventDefault(); askNow(); });
+$("#shotBtn").onclick = shot;
+
+/* ---------- sessions pager ---------- */
+const sess = { list: [], idx: 0 };
+const plural = (n, a, b, c) => n % 10 === 1 && n % 100 !== 11 ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c);
+async function loadSessions(keepIdx) {
+  const list = (await call("list_sessions")) || [{ id: "cur", label: "Сейчас", current: true, hints: 0 }];
+  const curId = sess.list[sess.idx] && sess.list[sess.idx].id;
+  sess.list = list;
+  sess.idx = keepIdx && curId ? Math.max(0, list.findIndex(x => x.id === curId)) : list.length - 1;
+  paintPager();
+}
+function paintPager() {
+  const n = sess.list.length;
+  $("#sPos").textContent = `${sess.idx + 1}/${n}`;
+  $("#prevS").disabled = sess.idx <= 0;
+  $("#nextS").disabled = sess.idx >= n - 1;
+}
+function showLive() { $("#archive").hidden = true; if (sess.list.length) { sess.idx = sess.list.length - 1; paintPager(); } }
+async function openSession(i) {
+  if (!sess.list.length) await loadSessions();
+  sess.idx = Math.max(0, Math.min(sess.list.length - 1, i)); paintPager();
+  const s = sess.list[sess.idx];
+  if (s.current) return showLive();
+  const items = (await call("get_session", s.id)) || [];
+  $("#arcTitle").textContent = "Сессия " + s.label;
+  $("#arcSub").textContent = `${s.hints} ${plural(s.hints, "подсказка", "подсказки", "подсказок")}`;
+  $("#arcList").innerHTML = renderArchive(items) || '<div class="arc-empty">В этой сессии нет подсказок.</div>';
+  $("#arcList").scrollTop = 0;
+  $("#archive").hidden = false;
+}
+function renderArchive(items) {
+  let html = "", q = [];
+  for (const it of items) {
+    if (it.who === "Подсказка") {
+      html += `<div class="arc-item"><div class="arc-q">${q.join("<br>") || ""}</div><div class="arc-a">${md(it.text)}</div></div>`;
+      q = [];
+    } else {
+      const tag = it.who === "Собеседник" ? "" : `<span class="tag" style="color:var(--cue)">${esc(it.who)}:</span> `;
+      q.push(`<time>${it.t.slice(0, 5)}</time>${tag}${esc(it.text === "—" ? "" : it.text)}`);
+    }
+  }
+  if (q.length) html += `<div class="arc-item"><div class="arc-q">${q.join("<br>")}</div></div>`;
+  return html;
+}
+$("#prevS").onclick = async () => { await loadSessions(true); openSession(sess.idx - 1); };
+$("#nextS").onclick = async () => { await loadSessions(true); openSession(sess.idx + 1); };
+$("#sPos").onclick = async () => { await loadSessions(true); openSession(sess.list.length - 1); };
+$("#arcBack").onclick = showLive;
+async function pause() {
+  const p = await call("toggle_pause");
+  state.paused = p === null ? !state.paused : p;
+  $("#pauseBtn").classList.toggle("on", state.paused);
+  $("#pauseBtn").innerHTML = state.paused
+    ? '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+  setState(state.paused ? "Пауза" : "Слушаю", state.paused ? "" : "live");
+}
+function clearAll() {
+  call("clear"); state.cards = {}; state.current = null; state.pending = [];
+  $("#feed").innerHTML = ""; $("#heard").textContent = "—";
+  $("#cue").innerHTML = ""; $("#cue").appendChild(emptyEl);
+}
+function setFont(px) {
+  px = Math.max(14, Math.min(30, px)); document.documentElement.style.setProperty("--fs", px + "px");
+  $("#fs").value = px; save("font_size", px);
+}
+function setAlpha(pct) {
+  document.documentElement.style.setProperty("--alpha", (pct / 100).toFixed(2)); $("#op").value = pct; save("opacity", pct);
+}
+function save(k, v) { state.settings[k] = v; call("set_setting", k, v); }
+function toggleSheet(force) { $("#sheet").classList.toggle("open", force); $("#setBtn").classList.toggle("on", $("#sheet").classList.contains("open")); }
+
+const emptyEl = $("#empty");
+$("#answerBtn").onclick = answer;
+$("#pauseBtn").onclick = pause;
+$("#setBtn").onclick = () => { toggleSheet(); if ($("#sheet").classList.contains("open") && !$("#acctRow").hidden) call("get_account").then(paintAccount); };
+$("#minBtn").onclick = () => call("minimize");
+$("#closeBtn").onclick = () => call("close");
+$("#pinBtn").onclick = async () => { state.pinned = !state.pinned; $("#pinBtn").classList.toggle("on", state.pinned); call("set_on_top", state.pinned); };
+$("#fs").oninput = e => setFont(+e.target.value);
+$("#op").oninput = e => setAlpha(+e.target.value);
+
+document.querySelectorAll(".seg").forEach(seg => seg.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  seg.querySelectorAll("button").forEach(x => x.classList.toggle("sel", x === b));
+  save(seg.dataset.key, b.dataset.v);
+}));
+function capNote(on) { $("#capNote").textContent = on ? "Окно скрыто от демонстрации и скриншотов" : "Окно видно при демонстрации и на скриншотах"; }
+document.querySelectorAll(".switch").forEach(sw => sw.addEventListener("click", async () => {
+  const on = !sw.classList.contains("on");
+  sw.classList.toggle("on", on); sw.setAttribute("aria-checked", on);
+  const res = await call("set_setting", sw.dataset.key, on ? sw.dataset.on : "");
+  state.settings[sw.dataset.key] = on ? sw.dataset.on : "";
+  if (sw.dataset.key === "hide_capture") {
+    if (on && res === false) { sw.classList.remove("on"); toast("Эта система не даёт скрыть окно от захвата экрана"); capNote(false); }
+    else capNote(on);
+  }
+}));
+
+document.addEventListener("keydown", e => {
+  const mod = isMac ? e.metaKey : e.ctrlKey;
+  if (e.key === "Escape") return toggleSheet(false);
+  if (!mod) return;
+  const k = e.key.toLowerCase();
+  if (k === "enter" && e.shiftKey) { e.preventDefault(); return shot(); }
+  const map = { enter: answer, p: pause, k: clearAll, ",": () => toggleSheet(),
+    "[": async () => { await loadSessions(true); openSession(sess.idx - 1); },
+    "]": async () => { await loadSessions(true); openSession(sess.idx + 1); },
+    "=": () => setFont(+$("#fs").value + 1), "+": () => setFont(+$("#fs").value + 1), "-": () => setFont(+$("#fs").value - 1) };
+  if (map[k]) { e.preventDefault(); map[k](); }
+});
+
+function applySettings(s) {
+  state.settings = s || {};
+  document.querySelectorAll(".seg").forEach(seg => {
+    const v = String(state.settings[seg.dataset.key] ?? "");
+    seg.querySelectorAll("button").forEach(b => b.classList.toggle("sel", b.dataset.v === v));
+  });
+  document.querySelectorAll(".switch").forEach(sw => sw.classList.toggle("on", !!state.settings[sw.dataset.key]));
+  capNote(!!state.settings.hide_capture);
+  document.documentElement.style.setProperty("--fs", (s.font_size || 19) + "px"); $("#fs").value = s.font_size || 19;
+  document.documentElement.style.setProperty("--alpha", ((s.opacity || 94) / 100).toFixed(2)); $("#op").value = s.opacity || 94;
+  state.pinned = s.on_top !== false; $("#pinBtn").classList.toggle("on", state.pinned);
+  if (s.opaque) document.body.classList.add("opaque");
+}
+
+/* ---------- sign-in (режим через сервер) ---------- */
+function showGate(msg) {
+  $("#gate").hidden = false; $("#gateErr").textContent = msg || "";
+  setTimeout(() => $("#gateCode").focus(), 50);
+}
+$("#gateForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = $("#gateCode").value.trim(); if (!code) return;
+  $("#gateBtn").disabled = true; $("#gateErr").textContent = "Проверяю…";
+  const r = (await call("set_access_code", code)) || { ok: false, error: "Нет связи с приложением" };
+  $("#gateBtn").disabled = false;
+  if (!r.ok) { $("#gateErr").textContent = r.error; return; }
+  $("#gate").hidden = true; $("#gateCode").value = "";
+  toast(`Привет, ${r.me.name}!`, true); paintAccount(r.me);
+});
+function paintAccount(me) {
+  if (!me) return;
+  $("#acctRow").hidden = false;
+  $("#acctInfo").innerHTML = me.error ? esc(me.error)
+    : `<b>${esc(me.name)}</b> · сегодня ${me.requests_today}/${me.daily_requests} подсказок, ${Math.round(me.audio_min_today)}/${me.daily_audio_min} мин`;
+}
+$("#signOut").onclick = async () => { await call("sign_out"); toggleSheet(false); showGate(""); };
+handlers.need_code = m => showGate(m[1] || "Код доступа не принят");
+
+/* ---------- «Обо мне и звонке» ---------- */
+$("#editCtx").onclick = async () => {
+  $("#edText").value = (await call("get_context")) || "";
+  toggleSheet(false); $("#editor").hidden = false; $("#edText").focus();
+};
+$("#edCancel").onclick = () => { $("#editor").hidden = true; };
+$("#edSave").onclick = async () => {
+  await call("save_context", $("#edText").value);
+  $("#editor").hidden = true; toast("Сохранено — ИИ уже учитывает", true);
+};
+
+let inited = false;
+async function init() {
+  if (inited) return; inited = true;
+  const s = (await call("get_settings")) || {};
+  applySettings(s); loadSessions();
+  if (s.server_mode) {
+    $("#providerRow").hidden = true;
+    $("#gateVer").textContent = s.version && s.version !== "dev" ? "Версия " + s.version : "";
+    if (s.need_code) showGate(""); else call("get_account").then(paintAccount);
+  }
+}
+window.addEventListener("pywebviewready", init);
+if (window.pywebview && window.pywebview.api) init();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+sounddevice
+numpy
+openai
+anthropic
+pywebview
+pillow
+certifi
+pyaudiowpatch; sys_platform == "win32"

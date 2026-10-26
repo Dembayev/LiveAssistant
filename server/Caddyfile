@@ -1,0 +1,19 @@
+{$DOMAIN} {
+	encode gzip
+
+	# API приложения; flush_interval -1 — ответ ИИ идёт потоком, без буферизации
+	handle /v1/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	# Сайт со ссылками на скачивание: site/index.html и site/downloads/*
+	handle {
+		root * /srv/site
+		file_server
+	}
+}

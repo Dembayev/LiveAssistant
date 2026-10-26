@@ -1,0 +1,111 @@
+name: Build apps
+
+# Сборка запускается, когда ты отправляешь тег версии:  git tag v1.0.0 && git push origin v1.0.0
+# Или вручную: вкладка Actions → Build apps → Run workflow.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt pyinstaller
+      - name: Bake server address and version
+        run: python tools/bake_config.py
+        env:
+          SERVER_URL: ${{ vars.SERVER_URL }}
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed --name ZoomAssistant
+          --add-data "app/ui.html;."
+          --collect-all webview --collect-all pyaudiowpatch
+          --exclude-module scipy --exclude-module tkinter --exclude-module faster_whisper
+          app/zoom_assistant2.py
+      - name: Rename
+        run: Move-Item dist/ZoomAssistant.exe dist/ZoomAssistant-Windows.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/ZoomAssistant-Windows.exe
+
+  macos:
+    runs-on: macos-14          # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt pyinstaller
+      - name: Build system-audio helper (ScreenCaptureKit)
+        run: swiftc -O -target arm64-apple-macos13.0 app/mac_audio/main.swift -o app/mac_audio/sck_audio
+      - name: Bake server address and version
+        run: python tools/bake_config.py
+        env:
+          SERVER_URL: ${{ vars.SERVER_URL }}
+      - name: Build .app
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name ZoomAssistant \
+            --osx-bundle-identifier kz.zoomassistant.app \
+            --add-data "app/ui.html:." \
+            --add-binary "app/mac_audio/sck_audio:." \
+            --collect-all webview \
+            --exclude-module scipy --exclude-module tkinter --exclude-module faster_whisper \
+            app/zoom_assistant2.py
+          PLIST=dist/ZoomAssistant.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Нужен доступ к звуку, чтобы слышать собеседника'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Подсказчик" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Подсказчик" "$PLIST"
+          codesign --force --deep --sign - dist/ZoomAssistant.app
+      - name: Make .dmg
+        run: |
+          mkdir dmg
+          cp -R dist/ZoomAssistant.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Podskazchik" -srcfolder dmg -ov -format UDZO ZoomAssistant-mac.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: ZoomAssistant-mac.dmg
+
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PATH: ${{ secrets.VPS_PATH }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+      # Если заданы секреты VPS_* — кладём файлы на твой сервер, в папку с сайтом (site/downloads)
+      - name: Upload to VPS
+        if: env.VPS_HOST != ''
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new out/* "$VPS_USER@$VPS_HOST:$VPS_PATH/"

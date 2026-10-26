@@ -1,0 +1,12 @@
+# Вариант для сервера, где уже есть nginx (порты 80/443 заняты).
+# Контейнер слушает только localhost:8765, наружу его отдаёт nginx (см. nginx-podskazchik.conf).
+services:
+  api:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8765:8000"
+    mem_limit: 300m
+    restart: unless-stopped
